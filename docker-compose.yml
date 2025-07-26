@@ -141,5 +141,5 @@ services:
     command: ["./scheduler", "-node-id=node-4", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081,scheduler-node-3:8081", "-postgres-dsn=postgres://scheduler:scheduler_pass@postgres:5432/task_scheduler?sslmode=disable"]
 
 volumes:
-  redis_data:
+  redis_data: 
   postgres_data: 

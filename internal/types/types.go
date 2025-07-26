@@ -48,6 +48,7 @@ const (
 	StatusRunning
 	StatusCompleted
 	StatusFailed
+	StatusTimeout
 )
 
 func (s Status) String() string {
@@ -60,6 +61,8 @@ func (s Status) String() string {
 		return "completed"
 	case StatusFailed:
 		return "failed"
+	case StatusTimeout:
+		return "timeout"
 	default:
 		return "unknown"
 	}
@@ -75,6 +78,8 @@ func ParseStatus(s string) Status {
 		return StatusCompleted
 	case "failed":
 		return StatusFailed
+	case "timeout":
+		return StatusTimeout
 	default:
 		return StatusPending
 	}
@@ -90,6 +95,10 @@ type Task struct {
 	CompletedAt *time.Time      `json:"completed_at,omitempty"`
 	WorkerID    string          `json:"worker_id,omitempty"`
 	Error       string          `json:"error,omitempty"`
+
+	Dependencies []string       `json:"dependencies,omitempty"`
+	Timeout      *time.Time     `json:"timeout,omitempty"`
+	MaxDuration  *time.Duration `json:"max_duration,omitempty"`
 }
 
 func NewTask(priority Priority, payload json.RawMessage) *Task {
@@ -100,6 +109,34 @@ func NewTask(priority Priority, payload json.RawMessage) *Task {
 		CreatedAt: time.Now(),
 		Status:    StatusPending,
 	}
+}
+
+func NewTaskWithDependencies(priority Priority, payload json.RawMessage, dependencies []string) *Task {
+	task := NewTask(priority, payload)
+	task.Dependencies = dependencies
+	return task
+}
+
+func NewTaskWithTimeout(priority Priority, payload json.RawMessage, maxDuration time.Duration) *Task {
+	task := NewTask(priority, payload)
+	task.MaxDuration = &maxDuration
+	return task
+}
+
+func (t *Task) IsReadyToRun() bool {
+	return t.Status == StatusPending && len(t.Dependencies) == 0
+}
+
+func (t *Task) HasTimedOut() bool {
+	if t.MaxDuration == nil {
+		return false
+	}
+
+	if t.StartedAt == nil {
+		return false
+	}
+
+	return time.Since(*t.StartedAt) > *t.MaxDuration
 }
 
 type TaskRequest struct {
