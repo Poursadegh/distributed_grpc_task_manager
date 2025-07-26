@@ -304,23 +304,3 @@ make lint               # Run linter
 make fmt                # Format code
 make proto              # Generate protobuf code
 ```
-
-### Adding New Features
-
-1. **Task Dependencies**: Implement task dependency graph
-2. **Timeouts**: Add configurable task timeouts
-3. **Web UI**: Create dashboard for monitoring
-4. **Autoscaling**: Implement horizontal autoscaling
-5. **Task Retries**: Add retry logic for failed tasks
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details.
