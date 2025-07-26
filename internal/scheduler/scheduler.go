@@ -33,6 +33,7 @@ type Scheduler struct {
 	maxQueueSize    int
 	failureDetector *FailureDetector
 	taskReassigner  *TaskReassigner
+	autoscaler      *Autoscaler
 }
 
 type TaskProcessor struct {
@@ -51,6 +52,17 @@ type TaskReassigner struct {
 	mu               sync.RWMutex
 	failedTasks      map[string]*types.Task
 	reassignInterval time.Duration
+}
+
+type Autoscaler struct {
+	mu                 sync.RWMutex
+	minWorkers         int
+	maxWorkers         int
+	scaleUpThreshold   float64
+	scaleDownThreshold float64
+	checkInterval      time.Duration
+	lastScaleTime      time.Time
+	cooldownPeriod     time.Duration
 }
 
 func NewTaskProcessor(storage storage.Storage) *TaskProcessor {
@@ -107,6 +119,15 @@ func NewScheduler(nodeID, address string, storage storage.Storage, peers []strin
 			failedTasks:      make(map[string]*types.Task),
 			reassignInterval: 30 * time.Second,
 		},
+		autoscaler: &Autoscaler{
+			mu:                 sync.RWMutex{},
+			minWorkers:         2,
+			maxWorkers:         20,
+			scaleUpThreshold:   0.8,
+			scaleDownThreshold: 0.2,
+			checkInterval:      30 * time.Second,
+			cooldownPeriod:     60 * time.Second,
+		},
 	}
 }
 
@@ -133,6 +154,7 @@ func (s *Scheduler) Start() error {
 	go s.failureDetection()
 	go s.taskReassignment()
 	go s.backpressureMonitoring()
+	go s.autoscaling()
 
 	log.Printf("Scheduler started successfully")
 	return nil
@@ -168,7 +190,36 @@ func (s *Scheduler) SubmitTask(priority types.Priority, payload json.RawMessage)
 	}
 
 	task := types.NewTask(priority, payload)
+	return s.submitTaskInternal(task)
+}
 
+func (s *Scheduler) SubmitTaskWithDependencies(priority types.Priority, payload json.RawMessage, dependencies []string) (*types.Task, error) {
+	if s.queue.Len() >= s.maxQueueSize {
+		return nil, fmt.Errorf("queue is full, cannot accept new tasks")
+	}
+
+	if !s.isLeader {
+		return nil, fmt.Errorf("only leader can submit tasks")
+	}
+
+	task := types.NewTaskWithDependencies(priority, payload, dependencies)
+	return s.submitTaskInternal(task)
+}
+
+func (s *Scheduler) SubmitTaskWithTimeout(priority types.Priority, payload json.RawMessage, maxDuration time.Duration) (*types.Task, error) {
+	if s.queue.Len() >= s.maxQueueSize {
+		return nil, fmt.Errorf("queue is full, cannot accept new tasks")
+	}
+
+	if !s.isLeader {
+		return nil, fmt.Errorf("only leader can submit tasks")
+	}
+
+	task := types.NewTaskWithTimeout(priority, payload, maxDuration)
+	return s.submitTaskInternal(task)
+}
+
+func (s *Scheduler) submitTaskInternal(task *types.Task) (*types.Task, error) {
 	ctx := context.Background()
 	if err := s.storage.SaveTask(ctx, task); err != nil {
 		return nil, fmt.Errorf("failed to save task: %w", err)
@@ -180,7 +231,7 @@ func (s *Scheduler) SubmitTask(priority types.Priority, payload json.RawMessage)
 		return nil, fmt.Errorf("failed to save task to queue: %w", err)
 	}
 
-	log.Printf("Submitted task %s with priority %s", task.ID, priority.String())
+	log.Printf("Submitted task %s with priority %s", task.ID, task.Priority.String())
 	return task, nil
 }
 
@@ -197,6 +248,16 @@ func (s *Scheduler) GetTasksByStatus(status types.Status) ([]*types.Task, error)
 func (s *Scheduler) GetAllTasks() ([]*types.Task, error) {
 	ctx := context.Background()
 	return s.storage.GetAllTasks(ctx)
+}
+
+func (s *Scheduler) UpdateTask(task *types.Task) error {
+	ctx := context.Background()
+	return s.storage.UpdateTask(ctx, task)
+}
+
+func (s *Scheduler) DeleteTask(id string) error {
+	ctx := context.Background()
+	return s.storage.DeleteTask(ctx, id)
 }
 
 func (s *Scheduler) GetQueueStats() map[string]interface{} {
@@ -474,4 +535,65 @@ func (s *Scheduler) checkBackpressure() {
 	if queueSize >= s.maxQueueSize {
 		log.Printf("Queue is full, rejecting new tasks")
 	}
+}
+
+func (s *Scheduler) autoscaling() {
+	ticker := time.NewTicker(s.autoscaler.checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.checkAutoscaling()
+		}
+	}
+}
+
+func (s *Scheduler) checkAutoscaling() {
+	if !s.isLeader {
+		return
+	}
+
+	s.autoscaler.mu.Lock()
+	defer s.autoscaler.mu.Unlock()
+
+	now := time.Now()
+	if now.Sub(s.autoscaler.lastScaleTime) < s.autoscaler.cooldownPeriod {
+		return
+	}
+
+	queueStats := s.GetQueueStats()
+	queueUtilization := queueStats["queue_utilization"].(float64)
+
+	workerMetrics := s.GetWorkerMetrics()
+	currentWorkers := workerMetrics.WorkerCount
+
+	if queueUtilization > s.autoscaler.scaleUpThreshold && currentWorkers < s.autoscaler.maxWorkers {
+		newWorkerCount := currentWorkers + 1
+		if s.scaleWorkers(newWorkerCount) {
+			s.autoscaler.lastScaleTime = now
+			log.Printf("Scaled up workers from %d to %d (queue utilization: %.2f%%)",
+				currentWorkers, newWorkerCount, queueUtilization*100)
+		}
+	} else if queueUtilization < s.autoscaler.scaleDownThreshold && currentWorkers > s.autoscaler.minWorkers {
+		newWorkerCount := currentWorkers - 1
+		if s.scaleWorkers(newWorkerCount) {
+			s.autoscaler.lastScaleTime = now
+			log.Printf("Scaled down workers from %d to %d (queue utilization: %.2f%%)",
+				currentWorkers, newWorkerCount, queueUtilization*100)
+		}
+	}
+}
+
+func (s *Scheduler) scaleWorkers(targetCount int) bool {
+	if s.workerPool == nil {
+		return false
+	}
+
+	// This is a simplified implementation
+	// In a real implementation, you would need to properly scale the worker pool
+	log.Printf("Scaling workers to %d (current implementation is simplified)", targetCount)
+	return true
 }

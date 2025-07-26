@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -83,9 +84,13 @@ func (api *API) setupRoutes() {
 	tasks := api.router.Group("/api/v1/tasks")
 	{
 		tasks.POST("/", api.submitTask)
+		tasks.POST("/dependencies", api.submitTaskWithDependencies)
+		tasks.POST("/timeout", api.submitTaskWithTimeout)
 		tasks.GET("/", api.listTasks)
 		tasks.GET("/:id", api.getTask)
 		tasks.GET("/status/:status", api.getTasksByStatus)
+		tasks.PUT("/:id", api.updateTask)
+		tasks.DELETE("/:id", api.deleteTask)
 	}
 
 	cluster := api.router.Group("/api/v1/cluster")
@@ -212,5 +217,146 @@ func (api *API) getStats(c *gin.Context) {
 			"queue":  queueStats,
 			"worker": workerMetrics,
 		},
+	})
+}
+
+func (api *API) submitTaskWithDependencies(c *gin.Context) {
+	var req struct {
+		Priority     types.Priority  `json:"priority" binding:"required"`
+		Payload      json.RawMessage `json:"payload" binding:"required"`
+		Dependencies []string        `json:"dependencies"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	task, err := api.scheduler.SubmitTaskWithDependencies(req.Priority, req.Payload, req.Dependencies)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	api.tasksSubmitted.Inc()
+
+	c.JSON(http.StatusCreated, types.TaskResponse{
+		Task:    task,
+		Success: true,
+	})
+}
+
+func (api *API) submitTaskWithTimeout(c *gin.Context) {
+	var req struct {
+		Priority types.Priority  `json:"priority" binding:"required"`
+		Payload  json.RawMessage `json:"payload" binding:"required"`
+		Timeout  int             `json:"timeout"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	maxDuration := time.Duration(req.Timeout) * time.Second
+	task, err := api.scheduler.SubmitTaskWithTimeout(req.Priority, req.Payload, maxDuration)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	api.tasksSubmitted.Inc()
+
+	c.JSON(http.StatusCreated, types.TaskResponse{
+		Task:    task,
+		Success: true,
+	})
+}
+
+func (api *API) updateTask(c *gin.Context) {
+	taskID := c.Param("id")
+
+	var req struct {
+		Priority     *types.Priority `json:"priority"`
+		Payload      json.RawMessage `json:"payload"`
+		Status       *types.Status   `json:"status"`
+		Dependencies []string        `json:"dependencies"`
+		Timeout      *int            `json:"timeout"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request body: " + err.Error(),
+		})
+		return
+	}
+
+	task, err := api.scheduler.GetTask(taskID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Task not found",
+		})
+		return
+	}
+
+	if req.Priority != nil {
+		task.Priority = *req.Priority
+	}
+	if req.Payload != nil {
+		task.Payload = req.Payload
+	}
+	if req.Status != nil {
+		task.Status = *req.Status
+	}
+	if req.Dependencies != nil {
+		task.Dependencies = req.Dependencies
+	}
+	if req.Timeout != nil {
+		maxDuration := time.Duration(*req.Timeout) * time.Second
+		task.MaxDuration = &maxDuration
+	}
+
+	if err := api.scheduler.UpdateTask(task); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to update task: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, types.TaskResponse{
+		Task:    task,
+		Success: true,
+	})
+}
+
+func (api *API) deleteTask(c *gin.Context) {
+	taskID := c.Param("id")
+
+	if err := api.scheduler.DeleteTask(taskID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to delete task: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Task deleted successfully",
 	})
 }

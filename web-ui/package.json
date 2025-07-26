@@ -25,7 +25,6 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/swagger": "^7.0.0",
     "@nestjs/websockets": "^10.0.0",
-    "@nestjs/platform-socket.io": "^10.0.0",
     "axios": "^1.6.0",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
