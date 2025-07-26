@@ -3,10 +3,16 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"task-scheduler/internal/types"
+)
+
+var (
+	ErrTaskNotFound = errors.New("task not found")
+	ErrNodeNotFound = errors.New("node not found")
 )
 
 type Storage interface {
@@ -32,20 +38,6 @@ type Storage interface {
 
 type RedisStorage struct {
 	client RedisClient
-}
-
-type RedisClient interface {
-	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
-	Get(ctx context.Context, key string) (string, error)
-	Del(ctx context.Context, keys ...string) error
-	Exists(ctx context.Context, keys ...string) (int64, error)
-	Keys(ctx context.Context, pattern string) ([]string, error)
-	LPush(ctx context.Context, key string, values ...interface{}) error
-	RPop(ctx context.Context, key string) (string, error)
-	LRange(ctx context.Context, key string, start, stop int64) ([]string, error)
-	LRem(ctx context.Context, key string, count int64, value interface{}) error
-	Ping(ctx context.Context) error
-	Close() error
 }
 
 func NewRedisStorage(client RedisClient) *RedisStorage {

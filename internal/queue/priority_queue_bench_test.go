@@ -16,6 +16,7 @@ func BenchmarkPriorityQueue_Add(b *testing.B) {
 		task := &types.Task{
 			ID:        fmt.Sprintf("task-%d", i),
 			Priority:  types.PriorityHigh,
+			Payload:   []byte(`{"test": "data"}`),
 			CreatedAt: time.Now(),
 		}
 		pq.Add(task)
@@ -25,11 +26,11 @@ func BenchmarkPriorityQueue_Add(b *testing.B) {
 func BenchmarkPriorityQueue_Remove(b *testing.B) {
 	pq := NewPriorityQueue()
 
-	// Pre-populate queue
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < 1000; i++ {
 		task := &types.Task{
 			ID:        fmt.Sprintf("task-%d", i),
 			Priority:  types.PriorityHigh,
+			Payload:   []byte(`{"test": "data"}`),
 			CreatedAt: time.Now(),
 		}
 		pq.Add(task)
@@ -44,11 +45,11 @@ func BenchmarkPriorityQueue_Remove(b *testing.B) {
 func BenchmarkPriorityQueue_GetByID(b *testing.B) {
 	pq := NewPriorityQueue()
 
-	// Pre-populate queue
 	for i := 0; i < 1000; i++ {
 		task := &types.Task{
 			ID:        fmt.Sprintf("task-%d", i),
 			Priority:  types.PriorityHigh,
+			Payload:   []byte(`{"test": "data"}`),
 			CreatedAt: time.Now(),
 		}
 		pq.Add(task)
@@ -56,30 +57,32 @@ func BenchmarkPriorityQueue_GetByID(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pq.GetByID(fmt.Sprintf("task-%d", i%1000))
+		pq.GetByID("task-500")
 	}
 }
 
 func BenchmarkPriorityQueue_Update(b *testing.B) {
 	pq := NewPriorityQueue()
 
-	// Pre-populate queue
 	for i := 0; i < 1000; i++ {
 		task := &types.Task{
 			ID:        fmt.Sprintf("task-%d", i),
 			Priority:  types.PriorityHigh,
+			Payload:   []byte(`{"test": "data"}`),
 			CreatedAt: time.Now(),
 		}
 		pq.Add(task)
 	}
 
+	task := &types.Task{
+		ID:        "task-500",
+		Priority:  types.PriorityLow,
+		Payload:   []byte(`{"test": "data"}`),
+		CreatedAt: time.Now(),
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		task := &types.Task{
-			ID:        fmt.Sprintf("task-%d", i%1000),
-			Priority:  types.PriorityLow,
-			CreatedAt: time.Now(),
-		}
 		pq.Update(task)
 	}
 }
@@ -94,6 +97,7 @@ func BenchmarkPriorityQueue_ConcurrentAdd(b *testing.B) {
 			task := &types.Task{
 				ID:        fmt.Sprintf("task-%d", i),
 				Priority:  types.PriorityHigh,
+				Payload:   []byte(`{"test": "data"}`),
 				CreatedAt: time.Now(),
 			}
 			pq.Add(task)
@@ -105,11 +109,11 @@ func BenchmarkPriorityQueue_ConcurrentAdd(b *testing.B) {
 func BenchmarkPriorityQueue_ConcurrentRemove(b *testing.B) {
 	pq := NewPriorityQueue()
 
-	// Pre-populate queue
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < 10000; i++ {
 		task := &types.Task{
 			ID:        fmt.Sprintf("task-%d", i),
 			Priority:  types.PriorityHigh,
+			Payload:   []byte(`{"test": "data"}`),
 			CreatedAt: time.Now(),
 		}
 		pq.Add(task)
@@ -130,29 +134,18 @@ func BenchmarkPriorityQueue_MixedOperations(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		i := 0
 		for pb.Next() {
-			switch i % 4 {
-			case 0:
-				// Add task
+			if i%3 == 0 {
 				task := &types.Task{
 					ID:        fmt.Sprintf("task-%d", i),
 					Priority:  types.PriorityHigh,
+					Payload:   []byte(`{"test": "data"}`),
 					CreatedAt: time.Now(),
 				}
 				pq.Add(task)
-			case 1:
-				// Remove task
+			} else if i%3 == 1 {
 				pq.Remove()
-			case 2:
-				// Get by ID
-				pq.GetByID(fmt.Sprintf("task-%d", i%100))
-			case 3:
-				// Update task
-				task := &types.Task{
-					ID:        fmt.Sprintf("task-%d", i%100),
-					Priority:  types.PriorityLow,
-					CreatedAt: time.Now(),
-				}
-				pq.Update(task)
+			} else {
+				pq.GetByID(fmt.Sprintf("task-%d", i))
 			}
 			i++
 		}

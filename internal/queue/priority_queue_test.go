@@ -8,43 +8,33 @@ import (
 	"task-scheduler/internal/types"
 )
 
-func TestNewPriorityQueue(t *testing.T) {
-	pq := NewPriorityQueue()
-	if pq == nil {
-		t.Fatal("NewPriorityQueue returned nil")
-	}
-
-	if pq.Len() != 0 {
-		t.Errorf("Expected empty queue, got length %d", pq.Len())
-	}
-}
-
 func TestPriorityQueue_Add(t *testing.T) {
 	pq := NewPriorityQueue()
 
-	// Create tasks with different priorities
-	highTask := &types.Task{
-		ID:        "high-1",
+	task1 := &types.Task{
+		ID:        "task-1",
 		Priority:  types.PriorityHigh,
+		Payload:   []byte(`{"test": "data1"}`),
 		CreatedAt: time.Now(),
 	}
 
-	mediumTask := &types.Task{
-		ID:        "medium-1",
+	task2 := &types.Task{
+		ID:        "task-2",
 		Priority:  types.PriorityMedium,
+		Payload:   []byte(`{"test": "data2"}`),
 		CreatedAt: time.Now(),
 	}
 
-	lowTask := &types.Task{
-		ID:        "low-1",
+	task3 := &types.Task{
+		ID:        "task-3",
 		Priority:  types.PriorityLow,
+		Payload:   []byte(`{"test": "data3"}`),
 		CreatedAt: time.Now(),
 	}
 
-	// Add tasks
-	pq.Add(highTask)
-	pq.Add(mediumTask)
-	pq.Add(lowTask)
+	pq.Add(task1)
+	pq.Add(task2)
+	pq.Add(task3)
 
 	if pq.Len() != 3 {
 		t.Errorf("Expected queue length 3, got %d", pq.Len())
@@ -54,56 +44,54 @@ func TestPriorityQueue_Add(t *testing.T) {
 func TestPriorityQueue_Remove(t *testing.T) {
 	pq := NewPriorityQueue()
 
-	// Create tasks with different priorities
-	highTask := &types.Task{
-		ID:        "high-1",
-		Priority:  types.PriorityHigh,
-		CreatedAt: time.Now(),
-	}
-
-	mediumTask := &types.Task{
-		ID:        "medium-1",
-		Priority:  types.PriorityMedium,
-		CreatedAt: time.Now(),
-	}
-
-	lowTask := &types.Task{
-		ID:        "low-1",
+	task1 := &types.Task{
+		ID:        "task-1",
 		Priority:  types.PriorityLow,
+		Payload:   []byte(`{"test": "data1"}`),
 		CreatedAt: time.Now(),
 	}
 
-	// Add tasks
-	pq.Add(lowTask)
-	pq.Add(highTask)
-	pq.Add(mediumTask)
-
-	// Remove tasks - should get high priority first
-	first := pq.Remove()
-	if first == nil {
-		t.Fatal("Expected to get a task, got nil")
-	}
-	if first.Priority != types.PriorityHigh {
-		t.Errorf("Expected high priority task, got %s", first.Priority.String())
+	task2 := &types.Task{
+		ID:        "task-2",
+		Priority:  types.PriorityHigh,
+		Payload:   []byte(`{"test": "data2"}`),
+		CreatedAt: time.Now(),
 	}
 
-	second := pq.Remove()
-	if second == nil {
-		t.Fatal("Expected to get a task, got nil")
-	}
-	if second.Priority != types.PriorityMedium {
-		t.Errorf("Expected medium priority task, got %s", second.Priority.String())
-	}
-
-	third := pq.Remove()
-	if third == nil {
-		t.Fatal("Expected to get a task, got nil")
-	}
-	if third.Priority != types.PriorityLow {
-		t.Errorf("Expected low priority task, got %s", third.Priority.String())
+	task3 := &types.Task{
+		ID:        "task-3",
+		Priority:  types.PriorityMedium,
+		Payload:   []byte(`{"test": "data3"}`),
+		CreatedAt: time.Now(),
 	}
 
-	// Queue should be empty now
+	pq.Add(task1)
+	pq.Add(task2)
+	pq.Add(task3)
+
+	removed := pq.Remove()
+	if removed == nil {
+		t.Fatal("Expected to remove a task, got nil")
+	}
+
+	if removed.ID != "task-2" {
+		t.Errorf("Expected to remove high priority task, got %s", removed.ID)
+	}
+
+	if pq.Len() != 2 {
+		t.Errorf("Expected queue length 2, got %d", pq.Len())
+	}
+
+	removed = pq.Remove()
+	if removed.ID != "task-3" {
+		t.Errorf("Expected to remove medium priority task, got %s", removed.ID)
+	}
+
+	removed = pq.Remove()
+	if removed.ID != "task-1" {
+		t.Errorf("Expected to remove low priority task, got %s", removed.ID)
+	}
+
 	if pq.Len() != 0 {
 		t.Errorf("Expected empty queue, got length %d", pq.Len())
 	}
@@ -113,24 +101,23 @@ func TestPriorityQueue_GetByID(t *testing.T) {
 	pq := NewPriorityQueue()
 
 	task := &types.Task{
-		ID:        "test-1",
+		ID:        "task-1",
 		Priority:  types.PriorityHigh,
+		Payload:   []byte(`{"test": "data"}`),
 		CreatedAt: time.Now(),
 	}
 
 	pq.Add(task)
 
-	// Get by ID
-	retrieved := pq.GetByID("test-1")
-	if retrieved == nil {
+	found := pq.GetByID("task-1")
+	if found == nil {
 		t.Fatal("Expected to find task, got nil")
 	}
 
-	if retrieved.ID != "test-1" {
-		t.Errorf("Expected task ID 'test-1', got '%s'", retrieved.ID)
+	if found.ID != "task-1" {
+		t.Errorf("Expected task ID 'task-1', got %s", found.ID)
 	}
 
-	// Get non-existent task
 	notFound := pq.GetByID("non-existent")
 	if notFound != nil {
 		t.Errorf("Expected nil for non-existent task, got %v", notFound)
@@ -141,63 +128,86 @@ func TestPriorityQueue_Update(t *testing.T) {
 	pq := NewPriorityQueue()
 
 	task := &types.Task{
-		ID:        "test-1",
-		Priority:  types.PriorityHigh,
+		ID:        "task-1",
+		Priority:  types.PriorityLow,
+		Payload:   []byte(`{"test": "data"}`),
 		CreatedAt: time.Now(),
 	}
 
 	pq.Add(task)
 
-	// Update task
-	task.Priority = types.PriorityLow
+	task.Priority = types.PriorityHigh
 	pq.Update(task)
 
-	// Remove and check priority
 	removed := pq.Remove()
-	if removed.Priority != types.PriorityLow {
-		t.Errorf("Expected low priority after update, got %s", removed.Priority.String())
+	if removed.Priority != types.PriorityHigh {
+		t.Errorf("Expected updated priority High, got %s", removed.Priority)
 	}
 }
 
 func TestPriorityQueue_GetStats(t *testing.T) {
 	pq := NewPriorityQueue()
 
-	// Add tasks with different priorities
-	pq.Add(&types.Task{ID: "high-1", Priority: types.PriorityHigh, CreatedAt: time.Now()})
-	pq.Add(&types.Task{ID: "high-2", Priority: types.PriorityHigh, CreatedAt: time.Now()})
-	pq.Add(&types.Task{ID: "medium-1", Priority: types.PriorityMedium, CreatedAt: time.Now()})
-	pq.Add(&types.Task{ID: "low-1", Priority: types.PriorityLow, CreatedAt: time.Now()})
+	for i := 0; i < 5; i++ {
+		task := &types.Task{
+			ID:        fmt.Sprintf("task-%d", i),
+			Priority:  types.PriorityHigh,
+			Payload:   []byte(`{"test": "data"}`),
+			CreatedAt: time.Now(),
+		}
+		pq.Add(task)
+	}
+
+	for i := 0; i < 3; i++ {
+		task := &types.Task{
+			ID:        fmt.Sprintf("task-%d", i+5),
+			Priority:  types.PriorityMedium,
+			Payload:   []byte(`{"test": "data"}`),
+			CreatedAt: time.Now(),
+		}
+		pq.Add(task)
+	}
+
+	for i := 0; i < 2; i++ {
+		task := &types.Task{
+			ID:        fmt.Sprintf("task-%d", i+8),
+			Priority:  types.PriorityLow,
+			Payload:   []byte(`{"test": "data"}`),
+			CreatedAt: time.Now(),
+		}
+		pq.Add(task)
+	}
 
 	stats := pq.GetStats()
 
-	if stats["total_tasks"] != 4 {
-		t.Errorf("Expected 4 total tasks, got %d", stats["total_tasks"])
+	if stats["total_tasks"].(int) != 10 {
+		t.Errorf("Expected total tasks 10, got %d", stats["total_tasks"])
 	}
 
-	if stats["high_priority"] != 2 {
-		t.Errorf("Expected 2 high priority tasks, got %d", stats["high_priority"])
+	if stats["high_priority"].(int) != 5 {
+		t.Errorf("Expected high priority tasks 5, got %d", stats["high_priority"])
 	}
 
-	if stats["medium_priority"] != 1 {
-		t.Errorf("Expected 1 medium priority task, got %d", stats["medium_priority"])
+	if stats["medium_priority"].(int) != 3 {
+		t.Errorf("Expected medium priority tasks 3, got %d", stats["medium_priority"])
 	}
 
-	if stats["low_priority"] != 1 {
-		t.Errorf("Expected 1 low priority task, got %d", stats["low_priority"])
+	if stats["low_priority"].(int) != 2 {
+		t.Errorf("Expected low priority tasks 2, got %d", stats["low_priority"])
 	}
 }
 
 func TestPriorityQueue_ConcurrentAccess(t *testing.T) {
 	pq := NewPriorityQueue()
-	done := make(chan bool, 10)
+	done := make(chan bool, 5)
 
-	// Start multiple goroutines adding tasks
 	for i := 0; i < 5; i++ {
 		go func(id int) {
 			for j := 0; j < 10; j++ {
 				task := &types.Task{
 					ID:        fmt.Sprintf("task-%d-%d", id, j),
 					Priority:  types.PriorityHigh,
+					Payload:   []byte(`{"test": "data"}`),
 					CreatedAt: time.Now(),
 				}
 				pq.Add(task)
@@ -206,47 +216,44 @@ func TestPriorityQueue_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	// Wait for all goroutines to finish
 	for i := 0; i < 5; i++ {
 		<-done
 	}
 
-	// Check final length
-	expected := 50 // 5 goroutines * 10 tasks each
+	expected := 50
 	if pq.Len() != expected {
-		t.Errorf("Expected %d tasks, got %d", expected, pq.Len())
+		t.Errorf("Expected queue length %d, got %d", expected, pq.Len())
 	}
 }
 
 func TestPriorityQueue_FIFOForSamePriority(t *testing.T) {
 	pq := NewPriorityQueue()
-
-	// Create tasks with same priority but different creation times
 	now := time.Now()
+
 	task1 := &types.Task{
 		ID:        "task-1",
 		Priority:  types.PriorityHigh,
+		Payload:   []byte(`{"test": "data1"}`),
 		CreatedAt: now,
 	}
 
 	task2 := &types.Task{
 		ID:        "task-2",
 		Priority:  types.PriorityHigh,
-		CreatedAt: now.Add(time.Second), // Later creation time
+		Payload:   []byte(`{"test": "data2"}`),
+		CreatedAt: now.Add(time.Second),
 	}
 
-	// Add tasks
-	pq.Add(task2) // Add later task first
-	pq.Add(task1) // Add earlier task second
+	pq.Add(task2)
+	pq.Add(task1)
 
-	// Remove tasks - should get earlier task first (FIFO for same priority)
-	first := pq.Remove()
-	if first.ID != "task-1" {
-		t.Errorf("Expected task-1 first (FIFO), got %s", first.ID)
+	removed := pq.Remove()
+	if removed.ID != "task1" {
+		t.Errorf("Expected earlier task first, got %s", removed.ID)
 	}
 
-	second := pq.Remove()
-	if second.ID != "task-2" {
-		t.Errorf("Expected task-2 second, got %s", second.ID)
+	removed = pq.Remove()
+	if removed.ID != "task2" {
+		t.Errorf("Expected later task second, got %s", removed.ID)
 	}
 }

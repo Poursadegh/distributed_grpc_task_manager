@@ -33,7 +33,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-1", "-http-addr=:8080", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379"]
+    command: ["./scheduler", "-node-id=node-1", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379"]
 
   scheduler-node-2:
     build: .
@@ -53,7 +53,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-2", "-http-addr=:8080", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081"]
+    command: ["./scheduler", "-node-id=node-2", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081"]
 
   scheduler-node-3:
     build: .
@@ -73,7 +73,27 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-3", "-http-addr=:8080", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081"]
+    command: ["./scheduler", "-node-id=node-3", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081"]
+
+  scheduler-node-4:
+    build: .
+    container_name: task-scheduler-node-4
+    ports:
+      - "8086:8080"
+      - "9093:9090"
+      - "8087:8081"
+    environment:
+      - NODE_ID=node-4
+      - HTTP_ADDRESS=:8080
+      - GRPC_ADDRESS=:9090
+      - RAFT_ADDRESS=:8081
+      - REDIS_ADDRESS=redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    command: ["./scheduler", "-node-id=node-4", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081,scheduler-node-3:8081"]
 
 volumes:
   redis_data: 

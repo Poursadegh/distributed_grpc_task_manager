@@ -113,10 +113,9 @@ func NewScheduler(nodeID, address string, storage storage.Storage, peers []strin
 func (s *Scheduler) Start() error {
 	log.Printf("Starting scheduler node %s on %s", s.nodeID, s.address)
 
-	dataDir := fmt.Sprintf("./data/%s", s.nodeID)
-	s.leaderElection = cluster.NewLeaderElection(s.nodeID, s.address, dataDir, s.peers, s.onLeaderChange)
+	s.leaderElection = cluster.NewLeaderElection(s.nodeID, s.address, s.peers, s.onLeaderChange)
 
-	if err := s.leaderElection.Start(s.ctx); err != nil {
+	if err := s.leaderElection.Start(); err != nil {
 		return fmt.Errorf("failed to start leader election: %w", err)
 	}
 

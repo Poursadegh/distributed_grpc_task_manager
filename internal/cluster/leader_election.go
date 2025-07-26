@@ -2,13 +2,13 @@ package cluster
 
 import (
 	"context"
-	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/hashicorp/raft"
@@ -19,36 +19,33 @@ type LeaderElection struct {
 	raft           *raft.Raft
 	nodeID         string
 	address        string
-	dataDir        string
 	peers          []string
 	onLeaderChange func(bool)
+	ctx            context.Context
+	cancel         context.CancelFunc
 }
 
-func NewLeaderElection(nodeID, address, dataDir string, peers []string, onLeaderChange func(bool)) *LeaderElection {
+func NewLeaderElection(nodeID, address string, peers []string, onLeaderChange func(bool)) *LeaderElection {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &LeaderElection{
 		nodeID:         nodeID,
 		address:        address,
-		dataDir:        dataDir,
 		peers:          peers,
 		onLeaderChange: onLeaderChange,
+		ctx:            ctx,
+		cancel:         cancel,
 	}
 }
 
-func (le *LeaderElection) Start(ctx context.Context) error {
-	// Create data directory
-	if err := os.MkdirAll(le.dataDir, 0755); err != nil {
+func (le *LeaderElection) Start() error {
+	dataDir := filepath.Join("data", "raft", le.nodeID)
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
 
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(le.nodeID)
-	config.SnapshotInterval = 30 * time.Second
-	config.SnapshotThreshold = 1000
-	config.HeartbeatTimeout = 1000 * time.Millisecond
-	config.ElectionTimeout = 1000 * time.Millisecond
-	config.CommitTimeout = 5 * time.Second
 
-	// Create transport
 	addr, err := net.ResolveTCPAddr("tcp", le.address)
 	if err != nil {
 		return fmt.Errorf("failed to resolve address: %w", err)
@@ -59,34 +56,28 @@ func (le *LeaderElection) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create transport: %w", err)
 	}
 
-	// Create log store
-	logStore, err := raftboltdb.NewBoltStore(filepath.Join(le.dataDir, "raft.db"))
+	logStore, err := raftboltdb.NewBoltStore(filepath.Join(dataDir, "raft.db"))
 	if err != nil {
 		return fmt.Errorf("failed to create log store: %w", err)
 	}
 
-	// Create stable store
-	stableStore, err := raftboltdb.NewBoltStore(filepath.Join(le.dataDir, "stable.db"))
+	stableStore, err := raftboltdb.NewBoltStore(filepath.Join(dataDir, "stable.db"))
 	if err != nil {
 		return fmt.Errorf("failed to create stable store: %w", err)
 	}
 
-	// Create snapshot store
-	snapshotStore, err := raft.NewFileSnapshotStore(le.dataDir, 3, os.Stderr)
+	snapshotStore, err := raft.NewFileSnapshotStore(dataDir, 3, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot store: %w", err)
 	}
 
-	// Create FSM (Finite State Machine)
 	fsm := &ClusterFSM{}
 
-	// Create Raft instance
 	le.raft, err = raft.NewRaft(config, fsm, logStore, stableStore, snapshotStore, transport)
 	if err != nil {
 		return fmt.Errorf("failed to create raft: %w", err)
 	}
 
-	// Bootstrap if this is the first node
 	if len(le.peers) == 0 {
 		configuration := raft.Configuration{
 			Servers: []raft.Server{
@@ -98,38 +89,31 @@ func (le *LeaderElection) Start(ctx context.Context) error {
 		}
 		le.raft.BootstrapCluster(configuration)
 	} else {
-		// Join existing cluster
 		for _, peer := range le.peers {
-			if err := le.raft.AddVoter(raft.ServerID(peer), raft.ServerAddress(peer), 0, 0).Error(); err != nil {
-				// Ignore errors if already part of cluster
-				fmt.Printf("Warning: failed to add voter %s: %v\n", peer, err)
+			err := le.raft.AddVoter(raft.ServerID(peer), raft.ServerAddress(peer), 0, 0).Error()
+			if err != nil && err.Error() != "server already exists" {
+				log.Printf("Failed to add peer %s: %v", peer, err)
 			}
 		}
 	}
 
-	// Start monitoring leader changes
-	go le.monitorLeaderChanges(ctx)
+	go le.monitorLeaderChanges()
 
+	log.Printf("Raft node %s started on %s", le.nodeID, le.address)
 	return nil
 }
 
-// Stop stops the Raft node
-func (le *LeaderElection) Stop() error {
+func (le *LeaderElection) Stop() {
 	if le.raft != nil {
-		return le.raft.Shutdown().Error()
+		le.raft.Shutdown()
 	}
-	return nil
+	le.cancel()
 }
 
-// IsLeader checks if this node is the leader
 func (le *LeaderElection) IsLeader() bool {
-	if le.raft == nil {
-		return false
-	}
-	return le.raft.State() == raft.Leader
+	return le.raft != nil && le.raft.State() == raft.Leader
 }
 
-// GetLeader returns the current leader ID
 func (le *LeaderElection) GetLeader() string {
 	if le.raft == nil {
 		return ""
@@ -137,97 +121,78 @@ func (le *LeaderElection) GetLeader() string {
 	return string(le.raft.Leader())
 }
 
-// GetState returns the current state of this node
 func (le *LeaderElection) GetState() string {
 	if le.raft == nil {
-		return "stopped"
+		return "unknown"
 	}
 	return le.raft.State().String()
 }
 
-// GetPeers returns the list of peers
-func (le *LeaderElection) GetPeers() []raft.Server {
+func (le *LeaderElection) GetPeers() []string {
 	if le.raft == nil {
 		return nil
 	}
-	return le.raft.GetConfiguration().Configuration().Servers
+
+	config := le.raft.GetConfiguration()
+	if err := config.Error(); err != nil {
+		return nil
+	}
+
+	var peers []string
+	for _, server := range config.Configuration().Servers {
+		peers = append(peers, string(server.ID))
+	}
+	return peers
 }
 
-// monitorLeaderChanges monitors for leader changes and calls the callback
-func (le *LeaderElection) monitorLeaderChanges(ctx context.Context) {
+func (le *LeaderElection) monitorLeaderChanges() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
 	var wasLeader bool
 	for {
 		select {
-		case <-ctx.Done():
+		case <-le.ctx.Done():
 			return
 		case <-ticker.C:
 			isLeader := le.IsLeader()
 			if isLeader != wasLeader {
-				wasLeader = isLeader
+				log.Printf("Node %s leadership changed: %t", le.nodeID, isLeader)
 				if le.onLeaderChange != nil {
 					le.onLeaderChange(isLeader)
 				}
+				wasLeader = isLeader
 			}
 		}
 	}
 }
 
-// ClusterFSM implements the Raft FSM interface
 type ClusterFSM struct {
-	mu    sync.RWMutex
 	state map[string]interface{}
 }
 
-// Apply applies a log entry to the FSM
 func (c *ClusterFSM) Apply(log *raft.Log) interface{} {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// For now, we'll just store the command
-	// In a real implementation, you'd parse and apply specific commands
-	c.state[string(log.Index)] = log.Data
-
+	c.state[fmt.Sprintf("%d", log.Index)] = string(log.Data)
 	return nil
 }
 
-// Snapshot creates a snapshot of the FSM
 func (c *ClusterFSM) Snapshot() (raft.FSMSnapshot, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	// Create a copy of the state
-	stateCopy := make(map[string]interface{})
-	for k, v := range c.state {
-		stateCopy[k] = v
-	}
-
-	return &ClusterSnapshot{state: stateCopy}, nil
+	return &ClusterSnapshot{state: c.state}, nil
 }
 
-// Restore restores the FSM from a snapshot
 func (c *ClusterFSM) Restore(rc io.ReadCloser) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Clear current state
 	c.state = make(map[string]interface{})
 
-	// Read and restore state
-	decoder := gob.NewDecoder(rc)
+	decoder := json.NewDecoder(rc)
 	return decoder.Decode(&c.state)
 }
 
-// ClusterSnapshot implements the FSM snapshot interface
 type ClusterSnapshot struct {
 	state map[string]interface{}
 }
 
-// Persist persists the snapshot
 func (c *ClusterSnapshot) Persist(sink raft.SnapshotSink) error {
-	encoder := gob.NewEncoder(sink)
+	encoder := json.NewEncoder(sink)
 	if err := encoder.Encode(c.state); err != nil {
 		sink.Cancel()
 		return err
@@ -235,7 +200,5 @@ func (c *ClusterSnapshot) Persist(sink raft.SnapshotSink) error {
 	return sink.Close()
 }
 
-// Release releases the snapshot
 func (c *ClusterSnapshot) Release() {
-	// Nothing to do for this simple implementation
 }

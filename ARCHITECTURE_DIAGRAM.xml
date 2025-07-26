@@ -29,9 +29,13 @@
           <mxGeometry x="360" y="160" width="140" height="80" as="geometry" />
         </mxCell>
         
+        <mxCell id="node4" value="Scheduler Node 4&#xa;(Follower)&#xa;HTTP:8086&#xa;gRPC:9093&#xa;Raft:8087" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="160" width="140" height="80" as="geometry" />
+        </mxCell>
+        
         <!-- Redis Storage -->
         <mxCell id="redis" value="Redis Storage&#xa;(Durable Backend)&#xa;Port:6379" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="520" y="160" width="140" height="80" as="geometry" />
+          <mxGeometry x="680" y="160" width="140" height="80" as="geometry" />
         </mxCell>
         
         <!-- Internal Components -->
@@ -98,6 +102,13 @@
           </mxGeometry>
         </mxCell>
         
+        <mxCell id="arrow5" value="HTTP/gRPC" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#666666;" edge="1" parent="1" source="lb" target="node4">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="250" y="90" as="sourcePoint" />
+            <mxPoint x="590" y="160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
         <!-- Raft Communication -->
         <mxCell id="raft1" value="Raft Consensus" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#82b366;dashed=1;" edge="1" parent="1" source="node1" target="node2">
           <mxGeometry width="50" height="50" relative="1" as="geometry">
@@ -120,25 +131,39 @@
           </mxGeometry>
         </mxCell>
         
+        <mxCell id="raft4" value="Raft Consensus" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#82b366;dashed=1;" edge="1" parent="1" source="node1" target="node4">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="180" y="240" as="sourcePoint" />
+            <mxPoint x="590" y="240" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
         <!-- Storage Connections -->
         <mxCell id="storage1" value="Task Storage" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="node1" target="redis">
           <mxGeometry width="50" height="50" relative="1" as="geometry">
             <mxPoint x="180" y="200" as="sourcePoint" />
-            <mxPoint x="520" y="200" as="targetPoint" />
+            <mxPoint x="680" y="200" as="targetPoint" />
           </mxGeometry>
         </mxCell>
         
         <mxCell id="storage2" value="Task Storage" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="node2" target="redis">
           <mxGeometry width="50" height="50" relative="1" as="geometry">
             <mxPoint x="340" y="200" as="sourcePoint" />
-            <mxPoint x="520" y="200" as="targetPoint" />
+            <mxPoint x="680" y="200" as="targetPoint" />
           </mxGeometry>
         </mxCell>
         
         <mxCell id="storage3" value="Task Storage" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="node3" target="redis">
           <mxGeometry width="50" height="50" relative="1" as="geometry">
             <mxPoint x="500" y="200" as="sourcePoint" />
-            <mxPoint x="520" y="200" as="targetPoint" />
+            <mxPoint x="680" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="storage4" value="Task Storage" style="endArrow=classic;html=1;rounded=0;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="node4" target="redis">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="740" y="200" as="sourcePoint" />
+            <mxPoint x="680" y="200" as="targetPoint" />
           </mxGeometry>
         </mxCell>
         
@@ -193,6 +218,13 @@
           </mxGeometry>
         </mxCell>
         
+        <mxCell id="metrics4" value="Metrics" style="endArrow=classic;html=1;rounded=0;strokeWidth=1;strokeColor=#b85450;dashed=1;" edge="1" parent="1" source="node4" target="prometheus">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="590" y="240" as="sourcePoint" />
+            <mxPoint x="160" y="400" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
         <!-- CLI Connections -->
         <mxCell id="cli1" value="API Calls" style="endArrow=classic;html=1;rounded=0;strokeWidth=1;strokeColor=#d6b656;" edge="1" parent="1" source="cli" target="node1">
           <mxGeometry width="50" height="50" relative="1" as="geometry">
@@ -212,6 +244,13 @@
           <mxGeometry width="50" height="50" relative="1" as="geometry">
             <mxPoint x="200" y="460" as="sourcePoint" />
             <mxPoint x="430" y="240" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        
+        <mxCell id="cli4" value="API Calls" style="endArrow=classic;html=1;rounded=0;strokeWidth=1;strokeColor=#d6b656;" edge="1" parent="1" source="cli" target="node4">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="200" y="460" as="sourcePoint" />
+            <mxPoint x="590" y="240" as="targetPoint" />
           </mxGeometry>
         </mxCell>
         

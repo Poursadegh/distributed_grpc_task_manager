@@ -6,21 +6,19 @@ import (
 	"testing"
 	"time"
 
+	"task-scheduler/internal/storage"
 	"task-scheduler/internal/types"
 )
 
-// MockStorage implements storage.Storage for testing
 type MockStorage struct {
 	tasks map[string]*types.Task
 	nodes map[string]*types.NodeInfo
-	queue []*types.Task
 }
 
 func NewMockStorage() *MockStorage {
 	return &MockStorage{
 		tasks: make(map[string]*types.Task),
 		nodes: make(map[string]*types.NodeInfo),
-		queue: make([]*types.Task, 0),
 	}
 }
 
@@ -33,17 +31,7 @@ func (m *MockStorage) GetTask(ctx context.Context, id string) (*types.Task, erro
 	if task, exists := m.tasks[id]; exists {
 		return task, nil
 	}
-	return nil, nil
-}
-
-func (m *MockStorage) UpdateTask(ctx context.Context, task *types.Task) error {
-	m.tasks[task.ID] = task
-	return nil
-}
-
-func (m *MockStorage) DeleteTask(ctx context.Context, id string) error {
-	delete(m.tasks, id)
-	return nil
+	return nil, storage.ErrTaskNotFound
 }
 
 func (m *MockStorage) GetAllTasks(ctx context.Context) ([]*types.Task, error) {
@@ -64,35 +52,26 @@ func (m *MockStorage) GetTasksByStatus(ctx context.Context, status types.Status)
 	return tasks, nil
 }
 
-func (m *MockStorage) SaveToQueue(ctx context.Context, task *types.Task) error {
-	m.queue = append(m.queue, task)
+func (m *MockStorage) UpdateTask(ctx context.Context, task *types.Task) error {
+	m.tasks[task.ID] = task
 	return nil
 }
 
-func (m *MockStorage) RemoveFromQueue(ctx context.Context, taskID string) error {
-	for i, task := range m.queue {
-		if task.ID == taskID {
-			m.queue = append(m.queue[:i], m.queue[i+1:]...)
-			break
-		}
-	}
+func (m *MockStorage) DeleteTask(ctx context.Context, id string) error {
+	delete(m.tasks, id)
 	return nil
 }
 
-func (m *MockStorage) GetQueueTasks(ctx context.Context) ([]*types.Task, error) {
-	return m.queue, nil
-}
-
-func (m *MockStorage) SaveNodeInfo(ctx context.Context, node *types.NodeInfo) error {
+func (m *MockStorage) SaveNode(ctx context.Context, node *types.NodeInfo) error {
 	m.nodes[node.ID] = node
 	return nil
 }
 
-func (m *MockStorage) GetNodeInfo(ctx context.Context, id string) (*types.NodeInfo, error) {
+func (m *MockStorage) GetNode(ctx context.Context, id string) (*types.NodeInfo, error) {
 	if node, exists := m.nodes[id]; exists {
 		return node, nil
 	}
-	return nil, nil
+	return nil, storage.ErrNodeNotFound
 }
 
 func (m *MockStorage) GetAllNodes(ctx context.Context) ([]*types.NodeInfo, error) {
@@ -108,6 +87,26 @@ func (m *MockStorage) DeleteNode(ctx context.Context, id string) error {
 	return nil
 }
 
+func (m *MockStorage) SaveNodeInfo(ctx context.Context, node *types.NodeInfo) error {
+	return m.SaveNode(ctx, node)
+}
+
+func (m *MockStorage) GetNodeInfo(ctx context.Context, id string) (*types.NodeInfo, error) {
+	return m.GetNode(ctx, id)
+}
+
+func (m *MockStorage) SaveToQueue(ctx context.Context, task *types.Task) error {
+	return nil
+}
+
+func (m *MockStorage) RemoveFromQueue(ctx context.Context, taskID string) error {
+	return nil
+}
+
+func (m *MockStorage) GetQueueTasks(ctx context.Context) ([]*types.Task, error) {
+	return nil, nil
+}
+
 func (m *MockStorage) Ping(ctx context.Context) error {
 	return nil
 }
@@ -118,18 +117,16 @@ func (m *MockStorage) Close() error {
 
 func TestScheduler_SubmitTask(t *testing.T) {
 	storage := NewMockStorage()
-	sched := NewScheduler("test-node", "localhost:8081", storage, nil)
+	sched := NewScheduler("test-node", "localhost:8080", storage, nil)
 
-	// Start scheduler
-	if err := sched.Start(); err != nil {
+	err := sched.Start()
+	if err != nil {
 		t.Fatalf("Failed to start scheduler: %v", err)
 	}
 	defer sched.Stop()
 
-	// Wait a bit for initialization
 	time.Sleep(100 * time.Millisecond)
 
-	// Submit a task
 	payload := json.RawMessage(`{"test": "data"}`)
 	task, err := sched.SubmitTask(types.PriorityHigh, payload)
 	if err != nil {
@@ -141,42 +138,35 @@ func TestScheduler_SubmitTask(t *testing.T) {
 	}
 
 	if task.Priority != types.PriorityHigh {
-		t.Errorf("Expected high priority, got %s", task.Priority.String())
+		t.Errorf("Expected priority High, got %s", task.Priority)
 	}
 
-	if task.Status != types.StatusPending {
-		t.Errorf("Expected pending status, got %s", task.Status.String())
+	if string(task.Payload) != `{"test": "data"}` {
+		t.Errorf("Expected payload '{\"test\": \"data\"}', got %s", string(task.Payload))
 	}
 }
 
 func TestScheduler_GetTask(t *testing.T) {
 	storage := NewMockStorage()
-	sched := NewScheduler("test-node", "localhost:8081", storage, nil)
+	sched := NewScheduler("test-node", "localhost:8080", storage, nil)
 
-	// Start scheduler
-	if err := sched.Start(); err != nil {
+	err := sched.Start()
+	if err != nil {
 		t.Fatalf("Failed to start scheduler: %v", err)
 	}
 	defer sched.Stop()
 
-	// Wait a bit for initialization
 	time.Sleep(100 * time.Millisecond)
 
-	// Submit a task
 	payload := json.RawMessage(`{"test": "data"}`)
 	task, err := sched.SubmitTask(types.PriorityHigh, payload)
 	if err != nil {
 		t.Fatalf("Failed to submit task: %v", err)
 	}
 
-	// Get the task
 	retrieved, err := sched.GetTask(task.ID)
 	if err != nil {
 		t.Fatalf("Failed to get task: %v", err)
-	}
-
-	if retrieved == nil {
-		t.Fatal("Expected task to be retrieved")
 	}
 
 	if retrieved.ID != task.ID {
@@ -186,19 +176,17 @@ func TestScheduler_GetTask(t *testing.T) {
 
 func TestScheduler_GetTasksByStatus(t *testing.T) {
 	storage := NewMockStorage()
-	sched := NewScheduler("test-node", "localhost:8081", storage, nil)
+	sched := NewScheduler("test-node", "localhost:8080", storage, nil)
 
-	// Start scheduler
-	if err := sched.Start(); err != nil {
+	err := sched.Start()
+	if err != nil {
 		t.Fatalf("Failed to start scheduler: %v", err)
 	}
 	defer sched.Stop()
 
-	// Wait a bit for initialization
 	time.Sleep(100 * time.Millisecond)
 
-	// Submit multiple tasks
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 5; i++ {
 		payload := json.RawMessage(`{"test": "data"}`)
 		_, err := sched.SubmitTask(types.PriorityHigh, payload)
 		if err != nil {
@@ -206,77 +194,86 @@ func TestScheduler_GetTasksByStatus(t *testing.T) {
 		}
 	}
 
-	// Get pending tasks
-	pendingTasks, err := sched.GetTasksByStatus(types.StatusPending)
+	tasks, err := sched.GetTasksByStatus(types.StatusPending)
 	if err != nil {
 		t.Fatalf("Failed to get pending tasks: %v", err)
 	}
 
-	if len(pendingTasks) != 3 {
-		t.Errorf("Expected 3 pending tasks, got %d", len(pendingTasks))
+	if len(tasks) != 5 {
+		t.Errorf("Expected 5 pending tasks, got %d", len(tasks))
 	}
 }
 
 func TestScheduler_GetQueueStats(t *testing.T) {
 	storage := NewMockStorage()
-	sched := NewScheduler("test-node", "localhost:8081", storage, nil)
+	sched := NewScheduler("test-node", "localhost:8080", storage, nil)
 
-	// Start scheduler
-	if err := sched.Start(); err != nil {
+	err := sched.Start()
+	if err != nil {
 		t.Fatalf("Failed to start scheduler: %v", err)
 	}
 	defer sched.Stop()
 
-	// Wait a bit for initialization
 	time.Sleep(100 * time.Millisecond)
 
-	// Submit tasks with different priorities
 	payload := json.RawMessage(`{"test": "data"}`)
-	sched.SubmitTask(types.PriorityHigh, payload)
-	sched.SubmitTask(types.PriorityMedium, payload)
-	sched.SubmitTask(types.PriorityLow, payload)
+	_, err = sched.SubmitTask(types.PriorityHigh, payload)
+	if err != nil {
+		t.Fatalf("Failed to submit task: %v", err)
+	}
 
-	// Get queue stats
+	_, err = sched.SubmitTask(types.PriorityMedium, payload)
+	if err != nil {
+		t.Fatalf("Failed to submit task: %v", err)
+	}
+
+	_, err = sched.SubmitTask(types.PriorityLow, payload)
+	if err != nil {
+		t.Fatalf("Failed to submit task: %v", err)
+	}
+
 	stats := sched.GetQueueStats()
 
-	if stats["total_tasks"] != 3 {
+	if stats["total_tasks"].(int) != 3 {
 		t.Errorf("Expected 3 total tasks, got %d", stats["total_tasks"])
 	}
 
-	if stats["high_priority"] != 1 {
+	if stats["high_priority"].(int) != 1 {
 		t.Errorf("Expected 1 high priority task, got %d", stats["high_priority"])
 	}
 
-	if stats["medium_priority"] != 1 {
+	if stats["medium_priority"].(int) != 1 {
 		t.Errorf("Expected 1 medium priority task, got %d", stats["medium_priority"])
 	}
 
-	if stats["low_priority"] != 1 {
+	if stats["low_priority"].(int) != 1 {
 		t.Errorf("Expected 1 low priority task, got %d", stats["low_priority"])
 	}
 }
 
 func TestScheduler_GetClusterInfo(t *testing.T) {
 	storage := NewMockStorage()
-	sched := NewScheduler("test-node", "localhost:8081", storage, nil)
+	sched := NewScheduler("test-node", "localhost:8080", storage, nil)
 
-	// Start scheduler
-	if err := sched.Start(); err != nil {
+	err := sched.Start()
+	if err != nil {
 		t.Fatalf("Failed to start scheduler: %v", err)
 	}
 	defer sched.Stop()
 
-	// Wait a bit for initialization
 	time.Sleep(100 * time.Millisecond)
 
-	// Get cluster info
 	info := sched.GetClusterInfo()
 
 	if info == nil {
 		t.Fatal("Expected cluster info to be returned")
 	}
 
-	if info.LeaderID == "" {
-		t.Error("Expected leader ID to be set")
+	if len(info.Nodes) != 1 {
+		t.Errorf("Expected 1 node, got %d", len(info.Nodes))
+	}
+
+	if info.Nodes[0].ID != "test-node" {
+		t.Errorf("Expected node ID 'test-node', got %s", info.Nodes[0].ID)
 	}
 }

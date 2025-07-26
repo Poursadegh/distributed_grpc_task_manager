@@ -112,11 +112,14 @@ dev-cluster:
 	go run cmd/scheduler/main.go -node-id=node-2 -http-addr=localhost:8082 -grpc-addr=localhost:9091 -redis-addr=localhost:6379 -peers=localhost:8081 &
 	@echo "Starting node 3..."
 	go run cmd/scheduler/main.go -node-id=node-3 -http-addr=localhost:8084 -grpc-addr=localhost:9092 -redis-addr=localhost:6379 -peers=localhost:8081,localhost:8083 &
+	@echo "Starting node 4..."
+	go run cmd/scheduler/main.go -node-id=node-4 -http-addr=localhost:8086 -grpc-addr=localhost:9093 -redis-addr=localhost:6379 -peers=localhost:8081,localhost:8083,localhost:8085 &
 	@echo "Local cluster started!"
 	@echo "Access nodes at:"
 	@echo "  Node 1: http://localhost:8080"
 	@echo "  Node 2: http://localhost:8082"
 	@echo "  Node 3: http://localhost:8084"
+	@echo "  Node 4: http://localhost:8086"
 
 # Stop local cluster
 dev-stop:
@@ -179,6 +182,9 @@ logs-node2:
 
 logs-node3:
 	docker-compose logs -f scheduler-node-3
+
+logs-node4:
+	docker-compose logs -f scheduler-node-4
 
 logs-redis:
 	docker-compose logs -f redis
