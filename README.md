@@ -1,55 +1,48 @@
-# Distributed Task Scheduler with Priority Queue
+# Distributed Task Scheduler
 
 A production-ready distributed task scheduler implemented in Go that handles prioritized tasks across multiple worker nodes, ensuring scalability, resilience, and observability.
 
-## Features
+## Overview
 
-### Core Functionality
-- **Priority Queue**: Supports 3 priority levels (High, Medium, Low)
-- **Task Management**: Full task lifecycle with status tracking
-- **REST API**: Complete HTTP API for task submission and monitoring
-- **Prometheus Metrics**: Built-in metrics for monitoring and alerting
-
-### Distributed Architecture
-- **Horizontal Scalability**: Multiple worker nodes share the same task pool
-- **Leader Election**: Raft-based consensus for leader election
-- **Failure Handling**: Automatic detection and recovery from node failures
-- **Heartbeat Mechanism**: Continuous health monitoring
-
-### Persistence & Recovery
-- **Durable Storage**: Redis-based persistence for tasks and cluster state
-- **Recovery**: Automatic recovery of unprocessed tasks on restart
-- **Data Integrity**: ACID-like guarantees for task state
-
-### Concurrency & Performance
-- **Worker Pool**: Configurable number of goroutines for task processing
-- **Thread-Safe**: Concurrent access to shared resources
-- **Backpressure Handling**: Graceful handling of queue growth
-- **High Performance**: Optimized priority queue operations
+This distributed task scheduler provides:
+- Priority queue with High/Medium/Low levels
+- gRPC API for task submission and monitoring
+- Raft-based leader election for distributed coordination
+- Redis persistence for task durability
+- Worker pool with configurable concurrency
+- Prometheus metrics for monitoring
 
 ## Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Node 1        │    │   Node 2        │    │   Node 3        │    │   Node 4        │
-│  (Leader)       │    │  (Follower)     │    │  (Follower)     │    │  (Follower)     │
-│                 │    │                 │    │                 │    │                 │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │   HTTP API  │ │    │ │   HTTP API  │ │    │ │   HTTP API  │ │    │ │   HTTP API  │ │
-│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │  Scheduler  │ │    │ │  Scheduler  │ │    │ │  Scheduler  │ │    │ │  Scheduler  │ │
-│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │Worker Pool  │ │    │ │Worker Pool  │ │    │ │Worker Pool  │ │    │ │Worker Pool  │ │
-│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
-│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
-│ │Priority Q   │ │    │ │Priority Q   │ │    │ │Priority Q   │ │    │ │Priority Q   │ │
-│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
-└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │                       │
-         └───────────────────────┼───────────────────────┼───────────────────────┘
-                                 │                       │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Node 1        │    │   Node 2        │    │   Node 3        │
+│  (Leader)       │    │  (Follower)     │    │  (Follower)     │
+│                 │    │                 │    │                 │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │   gRPC API  │ │    │ │   gRPC API  │ │    │ │   gRPC API  │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │Distributed  │ │    │ │Distributed  │ │    │ │Distributed  │ │
+│ │Coordinator  │ │    │ │Coordinator  │ │    │ │Coordinator  │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │  Scheduler  │ │    │ │  Scheduler  │ │    │ │  Scheduler  │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │Worker Pool  │ │    │ │Worker Pool  │ │    │ │Worker Pool  │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │Priority Q   │ │    │ │Priority Q   │ │    │ │Priority Q   │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │   Raft      │ │    │ │   Raft      │ │    │ │   Raft      │ │
+│ │ Consensus   │ │    │ │ Consensus   │ │    │ │ Consensus   │ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         └───────────────────────┼───────────────────────┘
+                                 │
                     ┌─────────────────┐
                     │      Redis      │
                     │   (Storage)     │
@@ -59,6 +52,7 @@ A production-ready distributed task scheduler implemented in Go that handles pri
 ## Quick Start
 
 ### Prerequisites
+
 - Go 1.21+
 - Docker and Docker Compose
 - Redis (for production)
@@ -76,14 +70,19 @@ A production-ready distributed task scheduler implemented in Go that handles pri
    go mod tidy
    ```
 
-3. **Run with Docker Compose**
+3. **Generate protobuf code**
+   ```bash
+   make proto
+   ```
+
+4. **Run with Docker Compose**
    ```bash
    docker-compose up -d
    ```
 
-4. **Submit a task**
+5. **Submit a task**
    ```bash
-   curl -X POST http://localhost:8080/api/v1/tasks \
+   curl -X POST http://localhost:9090/api/v1/tasks \
      -H "Content-Type: application/json" \
      -d '{
        "priority": "high",
@@ -91,14 +90,9 @@ A production-ready distributed task scheduler implemented in Go that handles pri
      }'
    ```
 
-5. **Check task status**
+6. **Check task status**
    ```bash
-   curl http://localhost:8080/api/v1/tasks
-   ```
-
-6. **View metrics**
-   ```bash
-   curl http://localhost:8080/metrics
+   curl http://localhost:9090/api/v1/tasks
    ```
 
 ### Manual Setup
@@ -112,7 +106,7 @@ A production-ready distributed task scheduler implemented in Go that handles pri
    ```bash
    go run cmd/scheduler/main.go \
      -node-id=node-1 \
-     -address=localhost:8080 \
+     -grpc-addr=localhost:9090 \
      -raft-addr=localhost:8081 \
      -redis-addr=localhost:6379
    ```
@@ -176,7 +170,7 @@ GET /metrics
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-node-id` | `node-1` | Unique node identifier |
-| `-address` | `localhost:8080` | HTTP server address |
+| `-grpc-addr` | `localhost:9090` | gRPC server address |
 | `-raft-addr` | `localhost:8081` | Raft server address |
 | `-redis-addr` | `localhost:6379` | Redis server address |
 | `-peers` | `` | Comma-separated list of peer addresses |
@@ -186,7 +180,7 @@ GET /metrics
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NODE_ID` | `node-1` | Node identifier |
-| `HTTP_ADDRESS` | `:8080` | HTTP server address |
+| `GRPC_ADDRESS` | `:9090` | gRPC server address |
 | `RAFT_ADDRESS` | `:8081` | Raft server address |
 | `REDIS_ADDRESS` | `localhost:6379` | Redis server address |
 
@@ -207,7 +201,7 @@ go test -bench=. ./internal/queue/
 go test -tags=integration ./...
 ```
 
-## Performance Analysis
+## Performance
 
 ### Expected Performance
 
@@ -241,7 +235,7 @@ Key metrics to monitor:
 docker build -t task-scheduler .
 
 # Run container
-docker run -p 8080:8080 -p 8081:8081 task-scheduler
+docker run -p 9090:9090 -p 8081:8081 task-scheduler
 ```
 
 ### Kubernetes
@@ -265,7 +259,7 @@ spec:
       - name: scheduler
         image: task-scheduler:latest
         ports:
-        - containerPort: 8080
+        - containerPort: 9090
         - containerPort: 8081
         env:
         - name: NODE_ID
@@ -274,24 +268,41 @@ spec:
               fieldPath: metadata.name
 ```
 
-## Development
-
-### Project Structure
+## Project Structure
 
 ```
 task-scheduler/
 ├── cmd/scheduler/          # Main application
 ├── internal/
-│   ├── api/               # HTTP API layer
-│   ├── cluster/           # Leader election
+│   ├── grpc/              # gRPC API layer
+│   ├── cluster/           # Leader election & coordination
 │   ├── queue/             # Priority queue
 │   ├── scheduler/         # Main scheduler logic
 │   ├── storage/           # Storage abstraction
 │   ├── types/             # Data types
 │   └── worker/            # Worker pool
+├── proto/                 # Protocol buffer definitions
 ├── docker-compose.yml     # Local development
 ├── Dockerfile            # Container build
 └── README.md             # This file
+```
+
+## Development
+
+### Available Make Commands
+
+```bash
+make build              # Build the scheduler binary
+make test               # Run unit tests
+make test-integration   # Run integration tests
+make benchmark          # Run benchmarks
+make clean              # Clean build artifacts
+make docker-build       # Build Docker image
+make docker-run         # Run with Docker Compose
+make docker-stop        # Stop Docker Compose
+make lint               # Run linter
+make fmt                # Format code
+make proto              # Generate protobuf code
 ```
 
 ### Adding New Features
@@ -313,19 +324,3 @@ task-scheduler/
 ## License
 
 MIT License - see LICENSE file for details.
-
-## Comparison with Alternatives
-
-### vs Celery
-- **Pros**: Better performance, native Go, simpler deployment
-- **Cons**: Less ecosystem, fewer integrations
-
-### vs Kubernetes Jobs
-- **Pros**: More control, custom scheduling logic, better for microservices
-- **Cons**: More complex, requires more infrastructure
-
-### vs RabbitMQ
-- **Pros**: Built-in priority queue, distributed coordination
-- **Cons**: Less mature, smaller community #   d i s t r i b u t e d _ g r p c _ t a s k _ m a n a g e r 
- 
- 
