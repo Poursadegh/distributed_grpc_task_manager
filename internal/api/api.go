@@ -12,12 +12,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// API handles HTTP API requests
 type API struct {
 	scheduler *scheduler.Scheduler
 	router    *gin.Engine
 
-	// Prometheus metrics
 	tasksSubmitted prometheus.Counter
 	tasksCompleted prometheus.Counter
 	tasksFailed    prometheus.Counter
@@ -26,23 +24,19 @@ type API struct {
 	workerCount    prometheus.Gauge
 }
 
-// NewAPI creates a new API instance
 func NewAPI(scheduler *scheduler.Scheduler) *API {
 	api := &API{
 		scheduler: scheduler,
 		router:    gin.Default(),
 	}
 
-	// Initialize Prometheus metrics
 	api.initMetrics()
 
-	// Setup routes
 	api.setupRoutes()
 
 	return api
 }
 
-// initMetrics initializes Prometheus metrics
 func (api *API) initMetrics() {
 	api.tasksSubmitted = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "tasks_submitted_total",
@@ -75,7 +69,6 @@ func (api *API) initMetrics() {
 		Help: "Current number of active workers",
 	})
 
-	// Register metrics
 	prometheus.MustRegister(api.tasksSubmitted)
 	prometheus.MustRegister(api.tasksCompleted)
 	prometheus.MustRegister(api.tasksFailed)
@@ -84,12 +77,9 @@ func (api *API) initMetrics() {
 	prometheus.MustRegister(api.workerCount)
 }
 
-// setupRoutes sets up the API routes
 func (api *API) setupRoutes() {
-	// Health check
 	api.router.GET("/health", api.healthHandler)
 
-	// Task endpoints
 	tasks := api.router.Group("/api/v1/tasks")
 	{
 		tasks.POST("/", api.submitTask)
@@ -98,23 +88,19 @@ func (api *API) setupRoutes() {
 		tasks.GET("/status/:status", api.getTasksByStatus)
 	}
 
-	// Cluster endpoints
 	cluster := api.router.Group("/api/v1/cluster")
 	{
 		cluster.GET("/info", api.getClusterInfo)
 		cluster.GET("/stats", api.getStats)
 	}
 
-	// Metrics endpoint
 	api.router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 }
 
-// Run starts the HTTP server
 func (api *API) Run(addr string) error {
 	return api.router.Run(addr)
 }
 
-// healthHandler handles health check requests
 func (api *API) healthHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "healthy",
@@ -124,7 +110,6 @@ func (api *API) healthHandler(c *gin.Context) {
 	})
 }
 
-// submitTask handles task submission
 func (api *API) submitTask(c *gin.Context) {
 	var req types.TaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -135,7 +120,6 @@ func (api *API) submitTask(c *gin.Context) {
 		return
 	}
 
-	// Submit task
 	task, err := api.scheduler.SubmitTask(req.Priority, req.Payload)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -145,7 +129,6 @@ func (api *API) submitTask(c *gin.Context) {
 		return
 	}
 
-	// Update metrics
 	api.tasksSubmitted.Inc()
 
 	c.JSON(http.StatusCreated, types.TaskResponse{
@@ -154,7 +137,6 @@ func (api *API) submitTask(c *gin.Context) {
 	})
 }
 
-// listTasks handles listing all tasks
 func (api *API) listTasks(c *gin.Context) {
 	tasks, err := api.scheduler.GetAllTasks()
 	if err != nil {
@@ -171,7 +153,6 @@ func (api *API) listTasks(c *gin.Context) {
 	})
 }
 
-// getTask handles getting a specific task
 func (api *API) getTask(c *gin.Context) {
 	taskID := c.Param("id")
 
@@ -190,7 +171,6 @@ func (api *API) getTask(c *gin.Context) {
 	})
 }
 
-// getTasksByStatus handles getting tasks by status
 func (api *API) getTasksByStatus(c *gin.Context) {
 	statusStr := c.Param("status")
 	status := types.ParseStatus(statusStr)
@@ -210,7 +190,6 @@ func (api *API) getTasksByStatus(c *gin.Context) {
 	})
 }
 
-// getClusterInfo handles getting cluster information
 func (api *API) getClusterInfo(c *gin.Context) {
 	info := api.scheduler.GetClusterInfo()
 
@@ -220,12 +199,10 @@ func (api *API) getClusterInfo(c *gin.Context) {
 	})
 }
 
-// getStats handles getting system statistics
 func (api *API) getStats(c *gin.Context) {
 	queueStats := api.scheduler.GetQueueStats()
 	workerMetrics := api.scheduler.GetWorkerMetrics()
 
-	// Update Prometheus metrics
 	api.queueSize.Set(float64(queueStats["total_tasks"].(int)))
 	api.workerCount.Set(float64(workerMetrics.WorkerCount))
 

@@ -29,10 +29,28 @@ type Scheduler struct {
 	cancel         context.CancelFunc
 	isLeader       bool
 	peers          []string
+
+	maxQueueSize    int
+	failureDetector *FailureDetector
+	taskReassigner  *TaskReassigner
 }
 
 type TaskProcessor struct {
 	storage storage.Storage
+}
+
+type FailureDetector struct {
+	mu              sync.RWMutex
+	failedWorkers   map[string]time.Time
+	failedNodes     map[string]time.Time
+	checkInterval   time.Duration
+	cleanupInterval time.Duration
+}
+
+type TaskReassigner struct {
+	mu               sync.RWMutex
+	failedTasks      map[string]*types.Task
+	reassignInterval time.Duration
 }
 
 func NewTaskProcessor(storage storage.Storage) *TaskProcessor {
@@ -69,15 +87,26 @@ func NewScheduler(nodeID, address string, storage storage.Storage, peers []strin
 	coordinator := cluster.NewDistributedCoordinator(nodeID, 5*time.Second, 30*time.Second)
 
 	return &Scheduler{
-		nodeID:      nodeID,
-		address:     address,
-		queue:       queue,
-		storage:     storage,
-		processor:   processor,
-		coordinator: coordinator,
-		ctx:         ctx,
-		cancel:      cancel,
-		peers:       peers,
+		nodeID:       nodeID,
+		address:      address,
+		queue:        queue,
+		storage:      storage,
+		processor:    processor,
+		coordinator:  coordinator,
+		ctx:          ctx,
+		cancel:       cancel,
+		peers:        peers,
+		maxQueueSize: 10000,
+		failureDetector: &FailureDetector{
+			failedWorkers:   make(map[string]time.Time),
+			failedNodes:     make(map[string]time.Time),
+			checkInterval:   10 * time.Second,
+			cleanupInterval: 60 * time.Second,
+		},
+		taskReassigner: &TaskReassigner{
+			failedTasks:      make(map[string]*types.Task),
+			reassignInterval: 30 * time.Second,
+		},
 	}
 }
 
@@ -102,6 +131,9 @@ func (s *Scheduler) Start() error {
 	go s.recoveryProcess()
 	go s.heartbeat()
 	go s.distributedTaskDistribution()
+	go s.failureDetection()
+	go s.taskReassignment()
+	go s.backpressureMonitoring()
 
 	log.Printf("Scheduler started successfully")
 	return nil
@@ -128,6 +160,10 @@ func (s *Scheduler) Stop() {
 }
 
 func (s *Scheduler) SubmitTask(priority types.Priority, payload json.RawMessage) (*types.Task, error) {
+	if s.queue.Len() >= s.maxQueueSize {
+		return nil, fmt.Errorf("queue is full, cannot accept new tasks")
+	}
+
 	if !s.isLeader {
 		return nil, fmt.Errorf("only leader can submit tasks")
 	}
@@ -165,7 +201,10 @@ func (s *Scheduler) GetAllTasks() ([]*types.Task, error) {
 }
 
 func (s *Scheduler) GetQueueStats() map[string]interface{} {
-	return s.queue.GetStats()
+	stats := s.queue.GetStats()
+	stats["max_queue_size"] = s.maxQueueSize
+	stats["queue_utilization"] = float64(stats["total_tasks"].(int)) / float64(s.maxQueueSize)
+	return stats
 }
 
 func (s *Scheduler) GetWorkerMetrics() *worker.WorkerMetrics {
@@ -328,4 +367,112 @@ func (s *Scheduler) distributeTasks() {
 	}
 
 	s.coordinator.UpdatePeerLoad(s.nodeID, queueSize)
+}
+
+func (s *Scheduler) failureDetection() {
+	ticker := time.NewTicker(s.failureDetector.checkInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.checkFailures()
+		}
+	}
+}
+
+func (s *Scheduler) checkFailures() {
+	metrics := s.workerPool.GetMetrics()
+	if metrics.TasksFailed > 0 {
+		log.Printf("Detected %d failed tasks", metrics.TasksFailed)
+	}
+
+	ctx := context.Background()
+	nodes, err := s.storage.GetAllNodes(ctx)
+	if err != nil {
+		log.Printf("Failed to get nodes for failure detection: %v", err)
+		return
+	}
+
+	now := time.Now()
+	for _, node := range nodes {
+		if node.ID != s.nodeID && now.Sub(node.LastSeen) > 30*time.Second {
+			s.failureDetector.mu.Lock()
+			s.failureDetector.failedNodes[node.ID] = now
+			s.failureDetector.mu.Unlock()
+			log.Printf("Detected failed node: %s", node.ID)
+		}
+	}
+}
+
+func (s *Scheduler) taskReassignment() {
+	ticker := time.NewTicker(s.taskReassigner.reassignInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.reassignFailedTasks()
+		}
+	}
+}
+
+func (s *Scheduler) reassignFailedTasks() {
+	if !s.isLeader {
+		return
+	}
+
+	ctx := context.Background()
+	failedTasks, err := s.GetTasksByStatus(types.StatusFailed)
+	if err != nil {
+		log.Printf("Failed to get failed tasks: %v", err)
+		return
+	}
+
+	for _, task := range failedTasks {
+		task.Status = types.StatusPending
+		task.StartedAt = nil
+		task.CompletedAt = nil
+		task.WorkerID = ""
+		task.Error = ""
+
+		if err := s.storage.UpdateTask(ctx, task); err != nil {
+			log.Printf("Failed to update task %s for reassignment: %v", task.ID, err)
+			continue
+		}
+
+		s.queue.Add(task)
+		log.Printf("Reassigned failed task %s", task.ID)
+	}
+}
+
+func (s *Scheduler) backpressureMonitoring() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.checkBackpressure()
+		}
+	}
+}
+
+func (s *Scheduler) checkBackpressure() {
+	queueSize := s.queue.Len()
+	utilization := float64(queueSize) / float64(s.maxQueueSize)
+
+	if utilization > 0.8 {
+		log.Printf("High queue utilization: %.2f%% (%d/%d)", utilization*100, queueSize, s.maxQueueSize)
+	}
+
+	if queueSize >= s.maxQueueSize {
+		log.Printf("Queue is full, rejecting new tasks")
+	}
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Priority represents the priority level of a task
 type Priority int
 
 const (
@@ -16,7 +15,6 @@ const (
 	PriorityHigh
 )
 
-// String returns the string representation of the priority
 func (p Priority) String() string {
 	switch p {
 	case PriorityHigh:
@@ -30,7 +28,6 @@ func (p Priority) String() string {
 	}
 }
 
-// ParsePriority parses a string into a Priority
 func ParsePriority(s string) Priority {
 	switch s {
 	case "high":
@@ -44,7 +41,6 @@ func ParsePriority(s string) Priority {
 	}
 }
 
-// Status represents the current status of a task
 type Status int
 
 const (
@@ -54,7 +50,6 @@ const (
 	StatusFailed
 )
 
-// String returns the string representation of the status
 func (s Status) String() string {
 	switch s {
 	case StatusPending:
@@ -70,7 +65,6 @@ func (s Status) String() string {
 	}
 }
 
-// ParseStatus parses a string into a Status
 func ParseStatus(s string) Status {
 	switch s {
 	case "pending":
@@ -86,7 +80,6 @@ func ParseStatus(s string) Status {
 	}
 }
 
-// Task represents a task in the scheduler
 type Task struct {
 	ID          string          `json:"id"`
 	Priority    Priority        `json:"priority"`
@@ -99,7 +92,6 @@ type Task struct {
 	Error       string          `json:"error,omitempty"`
 }
 
-// NewTask creates a new task with the given priority and payload
 func NewTask(priority Priority, payload json.RawMessage) *Task {
 	return &Task{
 		ID:        uuid.New().String(),
@@ -110,27 +102,23 @@ func NewTask(priority Priority, payload json.RawMessage) *Task {
 	}
 }
 
-// TaskRequest represents a request to create a new task
 type TaskRequest struct {
 	Priority Priority        `json:"priority" binding:"required"`
 	Payload  json.RawMessage `json:"payload" binding:"required"`
 }
 
-// TaskResponse represents a response for task operations
 type TaskResponse struct {
 	Task    *Task  `json:"task,omitempty"`
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`
 }
 
-// TasksResponse represents a response containing multiple tasks
 type TasksResponse struct {
 	Tasks   []*Task `json:"tasks"`
 	Success bool    `json:"success"`
 	Error   string  `json:"error,omitempty"`
 }
 
-// NodeInfo represents information about a node in the cluster
 type NodeInfo struct {
 	ID       string    `json:"id"`
 	Address  string    `json:"address"`
@@ -139,7 +127,6 @@ type NodeInfo struct {
 	Status   string    `json:"status"`
 }
 
-// ClusterInfo represents information about the cluster
 type ClusterInfo struct {
 	Nodes        []*NodeInfo `json:"nodes"`
 	LeaderID     string      `json:"leader_id"`

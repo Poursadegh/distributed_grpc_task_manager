@@ -19,10 +19,12 @@ services:
     build: .
     container_name: task-scheduler-node-1
     ports:
+      - "8080:8080"
       - "9090:9090"
       - "8081:8081"
     environment:
       - NODE_ID=node-1
+      - HTTP_ADDRESS=:8080
       - GRPC_ADDRESS=:9090
       - RAFT_ADDRESS=:8081
       - REDIS_ADDRESS=redis:6379
@@ -31,16 +33,18 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-1", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379"]
+    command: ["./scheduler", "-node-id=node-1", "-http-addr=:8080", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379"]
 
   scheduler-node-2:
     build: .
     container_name: task-scheduler-node-2
     ports:
+      - "8082:8080"
       - "9091:9090"
-      - "8082:8081"
+      - "8083:8081"
     environment:
       - NODE_ID=node-2
+      - HTTP_ADDRESS=:8080
       - GRPC_ADDRESS=:9090
       - RAFT_ADDRESS=:8081
       - REDIS_ADDRESS=redis:6379
@@ -49,16 +53,18 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-2", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081"]
+    command: ["./scheduler", "-node-id=node-2", "-http-addr=:8080", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081"]
 
   scheduler-node-3:
     build: .
     container_name: task-scheduler-node-3
     ports:
+      - "8084:8080"
       - "9092:9090"
-      - "8083:8081"
+      - "8085:8081"
     environment:
       - NODE_ID=node-3
+      - HTTP_ADDRESS=:8080
       - GRPC_ADDRESS=:9090
       - RAFT_ADDRESS=:8081
       - REDIS_ADDRESS=redis:6379
@@ -67,7 +73,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-3", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081"]
+    command: ["./scheduler", "-node-id=node-3", "-http-addr=:8080", "-grpc-addr=:9090", "-raft-addr=:8081", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081"]
 
 volumes:
   redis_data: 
