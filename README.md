@@ -61,7 +61,7 @@ This distributed task scheduler provides:
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Poursadegh/distributed_grpc_task_manager.git
    cd task-scheduler
    ```
 
