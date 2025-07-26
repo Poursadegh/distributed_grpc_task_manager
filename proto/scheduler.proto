@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package scheduler;
+
+option go_package = "task-scheduler/proto";
+
+service TaskScheduler {
+  rpc SubmitTask(SubmitTaskRequest) returns (SubmitTaskResponse);
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse);
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc GetTasksByStatus(GetTasksByStatusRequest) returns (ListTasksResponse);
+  rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse);
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_MEDIUM = 2;
+  PRIORITY_HIGH = 3;
+}
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_PENDING = 1;
+  STATUS_RUNNING = 2;
+  STATUS_COMPLETED = 3;
+  STATUS_FAILED = 4;
+}
+
+message Task {
+  string id = 1;
+  Priority priority = 2;
+  bytes payload = 3;
+  int64 created_at = 4;
+  Status status = 5;
+  int64 started_at = 6;
+  int64 completed_at = 7;
+  string worker_id = 8;
+  string error = 9;
+}
+
+message SubmitTaskRequest {
+  Priority priority = 1;
+  bytes payload = 2;
+}
+
+message SubmitTaskResponse {
+  Task task = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message GetTaskRequest {
+  string id = 1;
+}
+
+message GetTaskResponse {
+  Task task = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message ListTasksRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message GetTasksByStatusRequest {
+  Status status = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message NodeInfo {
+  string id = 1;
+  string address = 2;
+  bool is_leader = 3;
+  int64 last_seen = 4;
+  string status = 5;
+}
+
+message ClusterInfo {
+  repeated NodeInfo nodes = 1;
+  string leader_id = 2;
+  int32 total_tasks = 3;
+  int32 pending_tasks = 4;
+  int32 running_tasks = 5;
+}
+
+message GetClusterInfoRequest {}
+
+message GetClusterInfoResponse {
+  ClusterInfo info = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message QueueStats {
+  int32 total_tasks = 1;
+  int32 high_priority = 2;
+  int32 medium_priority = 3;
+  int32 low_priority = 4;
+}
+
+message WorkerMetrics {
+  int64 tasks_processed = 1;
+  int64 tasks_failed = 2;
+  int64 tasks_in_progress = 3;
+  int32 worker_count = 4;
+  int32 queue_size = 5;
+}
+
+message GetStatsRequest {}
+
+message GetStatsResponse {
+  QueueStats queue_stats = 1;
+  WorkerMetrics worker_metrics = 2;
+  bool success = 3;
+  string error = 4;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+  int64 timestamp = 2;
+  string node_id = 3;
+  bool is_leader = 4;
+} 
