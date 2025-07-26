@@ -12,10 +12,9 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
-	"github.com/hashicorp/raft-boltdb"
+	raftboltdb "github.com/hashicorp/raft-boltdb"
 )
 
-// LeaderElection manages leader election using Raft consensus
 type LeaderElection struct {
 	raft           *raft.Raft
 	nodeID         string
@@ -25,7 +24,6 @@ type LeaderElection struct {
 	onLeaderChange func(bool)
 }
 
-// NewLeaderElection creates a new leader election instance
 func NewLeaderElection(nodeID, address, dataDir string, peers []string, onLeaderChange func(bool)) *LeaderElection {
 	return &LeaderElection{
 		nodeID:         nodeID,
@@ -36,14 +34,12 @@ func NewLeaderElection(nodeID, address, dataDir string, peers []string, onLeader
 	}
 }
 
-// Start initializes and starts the Raft node
 func (le *LeaderElection) Start(ctx context.Context) error {
 	// Create data directory
 	if err := os.MkdirAll(le.dataDir, 0755); err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	// Create Raft configuration
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(le.nodeID)
 	config.SnapshotInterval = 30 * time.Second
