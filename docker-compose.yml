@@ -15,6 +15,23 @@ services:
       timeout: 3s
       retries: 5
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: task-scheduler-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=task_scheduler
+      - POSTGRES_USER=scheduler
+      - POSTGRES_PASSWORD=scheduler_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scheduler -d task_scheduler"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   scheduler-node-1:
     build: .
     container_name: task-scheduler-node-1
@@ -28,12 +45,19 @@ services:
       - GRPC_ADDRESS=:9090
       - RAFT_ADDRESS=:8081
       - REDIS_ADDRESS=redis:6379
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=task_scheduler
+      - POSTGRES_USER=scheduler
+      - POSTGRES_PASSWORD=scheduler_pass
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-1", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379"]
+    command: ["./scheduler", "-node-id=node-1", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-postgres-dsn=postgres://scheduler:scheduler_pass@postgres:5432/task_scheduler?sslmode=disable"]
 
   scheduler-node-2:
     build: .
@@ -48,12 +72,19 @@ services:
       - GRPC_ADDRESS=:9090
       - RAFT_ADDRESS=:8081
       - REDIS_ADDRESS=redis:6379
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=task_scheduler
+      - POSTGRES_USER=scheduler
+      - POSTGRES_PASSWORD=scheduler_pass
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-2", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081"]
+    command: ["./scheduler", "-node-id=node-2", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081", "-postgres-dsn=postgres://scheduler:scheduler_pass@postgres:5432/task_scheduler?sslmode=disable"]
 
   scheduler-node-3:
     build: .
@@ -68,12 +99,19 @@ services:
       - GRPC_ADDRESS=:9090
       - RAFT_ADDRESS=:8081
       - REDIS_ADDRESS=redis:6379
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=task_scheduler
+      - POSTGRES_USER=scheduler
+      - POSTGRES_PASSWORD=scheduler_pass
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-3", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081"]
+    command: ["./scheduler", "-node-id=node-3", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081", "-postgres-dsn=postgres://scheduler:scheduler_pass@postgres:5432/task_scheduler?sslmode=disable"]
 
   scheduler-node-4:
     build: .
@@ -88,12 +126,20 @@ services:
       - GRPC_ADDRESS=:9090
       - RAFT_ADDRESS=:8081
       - REDIS_ADDRESS=redis:6379
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=task_scheduler
+      - POSTGRES_USER=scheduler
+      - POSTGRES_PASSWORD=scheduler_pass
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
-    command: ["./scheduler", "-node-id=node-4", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081,scheduler-node-3:8081"]
+    command: ["./scheduler", "-node-id=node-4", "-http-addr=:8080", "-grpc-addr=:9090", "-redis-addr=redis:6379", "-peers=scheduler-node-1:8081,scheduler-node-2:8081,scheduler-node-3:8081", "-postgres-dsn=postgres://scheduler:scheduler_pass@postgres:5432/task_scheduler?sslmode=disable"]
 
 volumes:
-  redis_data: 
+  redis_data:
+  postgres_data: 

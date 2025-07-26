@@ -107,13 +107,13 @@ dev:
 dev-cluster:
 	@echo "Starting local cluster..."
 	@echo "Starting node 1..."
-	go run cmd/scheduler/main.go -node-id=node-1 -http-addr=localhost:8080 -grpc-addr=localhost:9090 -redis-addr=localhost:6379 -peers=localhost:8081 &
+	go run cmd/scheduler/main.go -node-id=node-1 -http-addr=localhost:8080 -grpc-addr=localhost:9090 -redis-addr=localhost:6379 -postgres-dsn=postgres://scheduler:scheduler_pass@localhost:5432/task_scheduler?sslmode=disable &
 	@echo "Starting node 2..."
-	go run cmd/scheduler/main.go -node-id=node-2 -http-addr=localhost:8082 -grpc-addr=localhost:9091 -redis-addr=localhost:6379 -peers=localhost:8081 &
+	go run cmd/scheduler/main.go -node-id=node-2 -http-addr=localhost:8082 -grpc-addr=localhost:9091 -redis-addr=localhost:6379 -postgres-dsn=postgres://scheduler:scheduler_pass@localhost:5432/task_scheduler?sslmode=disable -peers=localhost:8081 &
 	@echo "Starting node 3..."
-	go run cmd/scheduler/main.go -node-id=node-3 -http-addr=localhost:8084 -grpc-addr=localhost:9092 -redis-addr=localhost:6379 -peers=localhost:8081,localhost:8083 &
+	go run cmd/scheduler/main.go -node-id=node-3 -http-addr=localhost:8084 -grpc-addr=localhost:9092 -redis-addr=localhost:6379 -postgres-dsn=postgres://scheduler:scheduler_pass@localhost:5432/task_scheduler?sslmode=disable -peers=localhost:8081,localhost:8083 &
 	@echo "Starting node 4..."
-	go run cmd/scheduler/main.go -node-id=node-4 -http-addr=localhost:8086 -grpc-addr=localhost:9093 -redis-addr=localhost:6379 -peers=localhost:8081,localhost:8083,localhost:8085 &
+	go run cmd/scheduler/main.go -node-id=node-4 -http-addr=localhost:8086 -grpc-addr=localhost:9093 -redis-addr=localhost:6379 -postgres-dsn=postgres://scheduler:scheduler_pass@localhost:5432/task_scheduler?sslmode=disable -peers=localhost:8081,localhost:8083,localhost:8085 &
 	@echo "Local cluster started!"
 	@echo "Access nodes at:"
 	@echo "  Node 1: http://localhost:8080"
@@ -188,6 +188,9 @@ logs-node4:
 
 logs-redis:
 	docker-compose logs -f redis
+
+logs-postgres:
+	docker-compose logs -f postgres
 
 # Reset everything
 reset:

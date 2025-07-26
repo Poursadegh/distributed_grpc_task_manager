@@ -17,11 +17,12 @@ import (
 
 func main() {
 	var (
-		nodeID    = flag.String("node-id", "node-1", "Node ID")
-		httpAddr  = flag.String("http-addr", "localhost:8080", "HTTP server address")
-		grpcAddr  = flag.String("grpc-addr", "localhost:9090", "gRPC server address")
-		redisAddr = flag.String("redis-addr", "localhost:6379", "Redis server address")
-		peers     = flag.String("peers", "", "Comma-separated list of peer addresses")
+		nodeID      = flag.String("node-id", "node-1", "Node ID")
+		httpAddr    = flag.String("http-addr", "localhost:8080", "HTTP server address")
+		grpcAddr    = flag.String("grpc-addr", "localhost:9090", "gRPC server address")
+		redisAddr   = flag.String("redis-addr", "localhost:6379", "Redis server address")
+		postgresDSN = flag.String("postgres-dsn", "", "PostgreSQL connection string")
+		peers       = flag.String("peers", "", "Comma-separated list of peer addresses")
 	)
 	flag.Parse()
 
@@ -33,14 +34,25 @@ func main() {
 	}
 	log.Printf("Connected to Redis at %s", *redisAddr)
 
-	storage := storage.NewRedisStorage(redisClient)
+	var storageImpl storage.Storage
+	if *postgresDSN != "" {
+		hybridStorage, err := storage.NewHybridStorage(redisClient, *postgresDSN)
+		if err != nil {
+			log.Fatalf("Failed to create hybrid storage: %v", err)
+		}
+		storageImpl = hybridStorage
+		log.Printf("Using hybrid storage with Redis caching and PostgreSQL persistence")
+	} else {
+		storageImpl = storage.NewRedisStorage(redisClient)
+		log.Printf("Using Redis-only storage")
+	}
 
 	var peerList []string
 	if *peers != "" {
 		peerList = []string{*peers}
 	}
 
-	sched := scheduler.NewScheduler(*nodeID, *httpAddr, storage, peerList)
+	sched := scheduler.NewScheduler(*nodeID, *httpAddr, storageImpl, peerList)
 
 	if err := sched.Start(); err != nil {
 		log.Fatalf("Failed to start scheduler: %v", err)
